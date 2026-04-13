@@ -34,6 +34,7 @@ public interface ApiService {
     Call<RegisterResponse> register(
             @Header("X-CSRFToken") String csrfToken,
             @Header("Cookie") String cookie,
+            @Header("Referer") String referer,
             @Body RegisterRequest body
     );
 
@@ -41,6 +42,7 @@ public interface ApiService {
     Call<LoginResponse> login(
             @Header("X-CSRFToken") String csrfToken,
             @Header("Cookie") String cookie,
+            @Header("Referer") String referer,
             @Body LoginRequest body
     );
 
