@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="12dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <!-- Icon -->
+        <TextView
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:text="📊"
+            android:textSize="24sp"
+            android:gravity="center"
+            android:layout_marginEnd="16dp" />
+
+        <!-- Info -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvDeckTitle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Deck Title"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#1A1A2E"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/tvSlideCount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0 slides"
+                android:textSize="13sp"
+                android:textColor="#6C757D" />
+        </LinearLayout>
+
+        <!-- Status -->
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="processing"
+            android:textSize="12sp"
+            android:textColor="#FFC107" />
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>
