@@ -17,7 +17,6 @@ import com.example.pitchperfect.utils.SessionManager;
 import org.json.JSONObject;
 
 import java.util.Iterator;
-import java.util.List;
 
 import retrofit2.Call;
 import retrofit2.Callback;
@@ -80,7 +79,8 @@ public class RegisterActivity extends AppCompatActivity {
         showLoading(true);
         hideError();
 
-        ApiClient.getClient(this).register(csrfToken, "", REFERER_URL, new RegisterRequest(username, email, password))
+        // Cookie header is now handled automatically by PersistentCookieJar
+        ApiClient.getClient(this).register(csrfToken, REFERER_URL, new RegisterRequest(username, email, password, confirmPassword))
                 .enqueue(new Callback<RegisterResponse>() {
                     @Override
                     public void onResponse(Call<RegisterResponse> call, Response<RegisterResponse> response) {
@@ -106,7 +106,7 @@ public class RegisterActivity extends AppCompatActivity {
 
     private void handleErrorResponse(Response<RegisterResponse> response) {
         if (response.code() == 500) {
-            showError("Server Error (500). The server is currently unable to handle this request. This often happens if the email service is not configured or there is a database issue.");
+            showError("Server Error (500). The server is currently unable to handle this request.");
             return;
         }
         try {

@@ -85,10 +85,9 @@ public class LoginActivity extends AppCompatActivity {
         hideError();
 
         // OkHttp now automatically handles cookies via cookieJar
-        // Just pass CSRF token, cookie header (empty - handled by OkHttp), and referer
+        // Just pass CSRF token and referer.
         ApiClient.getClient(this).login(
                 csrfToken,
-                "", // Cookie header is handled automatically by OkHttp
                 BASE_URL,
                 new LoginRequest(username, password)
         ).enqueue(new Callback<LoginResponse>() {

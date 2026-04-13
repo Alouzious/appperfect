@@ -2,6 +2,7 @@ package com.example.pitchperfect.ui.feedback;
 
 import android.os.Bundle;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.pitchperfect.api.ApiClient;
@@ -41,17 +42,15 @@ public class FeedbackActivity extends AppCompatActivity {
     }
 
     private void loadFeedback() {
-        ApiClient.getClient(this).getPracticeFeedback(
-                sessionManager.getSessionCookie(), sessionId
-        ).enqueue(new Callback<PracticeFeedback>() {
+        ApiClient.getClient(this).getPracticeFeedback(sessionId).enqueue(new Callback<PracticeFeedback>() {
             @Override
-            public void onResponse(Call<PracticeFeedback> call, Response<PracticeFeedback> response) {
+            public void onResponse(@NonNull Call<PracticeFeedback> call, @NonNull Response<PracticeFeedback> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     displayFeedback(response.body());
                 }
             }
             @Override
-            public void onFailure(Call<PracticeFeedback> call, Throwable t) {}
+            public void onFailure(@NonNull Call<PracticeFeedback> call, @NonNull Throwable t) {}
         });
     }
 

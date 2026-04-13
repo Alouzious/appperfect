@@ -15,13 +15,13 @@ public class RegisterRequest {
     @SerializedName("password")
     private String password;
 
-    @SerializedName("re_password")
-    private String rePassword;
+    @SerializedName("password_confirm")
+    private String passwordConfirm;
 
-    public RegisterRequest(String username, String email, String password) {
+    public RegisterRequest(String username, String email, String password, String passwordConfirm) {
         this.username = username;
         this.email = email;
         this.password = password;
-        this.rePassword = password;
+        this.passwordConfirm = passwordConfirm;
     }
 }

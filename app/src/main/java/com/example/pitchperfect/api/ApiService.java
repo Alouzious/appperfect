@@ -33,7 +33,6 @@ public interface ApiService {
     @POST("auth/register/")
     Call<RegisterResponse> register(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie,
             @Header("Referer") String referer,
             @Body RegisterRequest body
     );
@@ -41,7 +40,6 @@ public interface ApiService {
     @POST("auth/login/")
     Call<LoginResponse> login(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie,
             @Header("Referer") String referer,
             @Body LoginRequest body
     );
@@ -49,19 +47,17 @@ public interface ApiService {
     @POST("auth/logout/")
     Call<Void> logout(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie
+            @Header("Referer") String referer
     );
 
     @GET("pitches/")
-    Call<PitchDeckListResponse> getPitchDecks(
-            @Header("Cookie") String cookie
-    );
+    Call<PitchDeckListResponse> getPitchDecks();
 
     @Multipart
     @POST("pitches/upload/")
     Call<PitchDeck> uploadPitchDeck(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie,
+            @Header("Referer") String referer,
             @Part MultipartBody.Part file,
             @Part("title") RequestBody title
     );
@@ -69,26 +65,24 @@ public interface ApiService {
     @DELETE("pitches/{deck_id}/delete/")
     Call<Void> deletePitchDeck(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie,
+            @Header("Referer") String referer,
             @Path("deck_id") String deckId
     );
 
     @POST("practice/sessions/")
     Call<PracticeSession> createPracticeSession(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie,
+            @Header("Referer") String referer,
             @Body PracticeSessionRequest body
     );
 
     @GET("practice/sessions/list/")
     Call<PracticeListResponse> getPracticeSessions(
-            @Header("Cookie") String cookie,
             @Query("pitch_deck") String deckId
     );
 
     @GET("practice/sessions/{session_id}/feedback/")
     Call<PracticeFeedback> getPracticeFeedback(
-            @Header("Cookie") String cookie,
             @Path("session_id") String sessionId
     );
 
@@ -96,7 +90,7 @@ public interface ApiService {
     @POST("practice/sessions/{session_id}/submit-audio/")
     Call<PracticeSession> submitPracticeAudio(
             @Header("X-CSRFToken") String csrfToken,
-            @Header("Cookie") String cookie,
+            @Header("Referer") String referer,
             @Path("session_id") String sessionId,
             @Part MultipartBody.Part audio,
             @Part("duration_seconds") RequestBody duration

@@ -9,6 +9,7 @@ import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
@@ -38,8 +39,9 @@ public class HomeActivity extends AppCompatActivity {
     private ActivityHomeBinding binding;
     private SessionManager sessionManager;
     private DeckAdapter deckAdapter;
-    private List<PitchDeck> deckList = new ArrayList<>();
+    private final List<PitchDeck> deckList = new ArrayList<>();
     private String csrfToken = "";
+    private static final String REFERER_URL = "https://pitch-perfect-api.onrender.com/";
 
     private ActivityResultLauncher<String[]> filePickerLauncher;
 
@@ -90,23 +92,22 @@ public class HomeActivity extends AppCompatActivity {
     private void fetchCsrfToken() {
         ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
-            public void onResponse(Call<CsrfResponse> call, Response<CsrfResponse> response) {
+            public void onResponse(@NonNull Call<CsrfResponse> call, @NonNull Response<CsrfResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     csrfToken = response.body().getCsrfToken();
                 }
             }
             @Override
-            public void onFailure(Call<CsrfResponse> call, Throwable t) {}
+            public void onFailure(@NonNull Call<CsrfResponse> call, @NonNull Throwable t) {}
         });
     }
 
     private void loadDecks() {
         binding.progressBar.setVisibility(View.VISIBLE);
-        String cookie = sessionManager.getSessionCookie();
 
-        ApiClient.getClient(this).getPitchDecks(cookie).enqueue(new Callback<PitchDeckListResponse>() {
+        ApiClient.getClient(this).getPitchDecks().enqueue(new Callback<PitchDeckListResponse>() {
             @Override
-            public void onResponse(Call<PitchDeckListResponse> call, Response<PitchDeckListResponse> response) {
+            public void onResponse(@NonNull Call<PitchDeckListResponse> call, @NonNull Response<PitchDeckListResponse> response) {
                 binding.progressBar.setVisibility(View.GONE);
                 if (response.isSuccessful() && response.body() != null) {
                     deckList.clear();
@@ -119,7 +120,7 @@ public class HomeActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onFailure(Call<PitchDeckListResponse> call, Throwable t) {
+            public void onFailure(@NonNull Call<PitchDeckListResponse> call, @NonNull Throwable t) {
                 binding.progressBar.setVisibility(View.GONE);
                 Toast.makeText(HomeActivity.this, "Failed to load decks", Toast.LENGTH_SHORT).show();
             }
@@ -150,29 +151,36 @@ public class HomeActivity extends AppCompatActivity {
             binding.progressBar.setVisibility(View.VISIBLE);
             binding.btnUploadDeck.setEnabled(false);
 
+            // Important: Use the latest CSRF token from CookieJar if available
+            String dynamicCsrfToken = csrfToken;
+            if (ApiClient.getCookieJar() != null) {
+                String jarToken = ApiClient.getCookieJar().getCookieValue("csrftoken");
+                if (jarToken != null) dynamicCsrfToken = jarToken;
+            }
+
             ApiClient.getClient(this).uploadPitchDeck(
-                    csrfToken,
-                    sessionManager.getSessionCookie(),
+                    dynamicCsrfToken,
+                    REFERER_URL,
                     filePart,
                     titleBody
             ).enqueue(new Callback<PitchDeck>() {
                 @Override
-                public void onResponse(Call<PitchDeck> call, Response<PitchDeck> response) {
+                public void onResponse(@NonNull Call<PitchDeck> call, @NonNull Response<PitchDeck> response) {
                     binding.progressBar.setVisibility(View.GONE);
                     binding.btnUploadDeck.setEnabled(true);
                     if (response.isSuccessful()) {
                         Toast.makeText(HomeActivity.this, "Deck uploaded! Processing...", Toast.LENGTH_SHORT).show();
                         loadDecks();
                     } else {
-                        Toast.makeText(HomeActivity.this, "Upload failed", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(HomeActivity.this, "Upload failed: " + response.code(), Toast.LENGTH_SHORT).show();
                     }
                 }
 
                 @Override
-                public void onFailure(Call<PitchDeck> call, Throwable t) {
+                public void onFailure(@NonNull Call<PitchDeck> call, @NonNull Throwable t) {
                     binding.progressBar.setVisibility(View.GONE);
                     binding.btnUploadDeck.setEnabled(true);
-                    Toast.makeText(HomeActivity.this, "Network error", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(HomeActivity.this, "Network error: " + t.getMessage(), Toast.LENGTH_SHORT).show();
                 }
             });
 
@@ -183,12 +191,10 @@ public class HomeActivity extends AppCompatActivity {
 
     private String getFileName(Uri uri) {
         String result = "pitch_deck.pptx";
-        try {
-            android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+        try (android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) {
                 int idx = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
                 if (idx >= 0) result = cursor.getString(idx);
-                cursor.close();
             }
         } catch (Exception e) { /* use default */ }
         return result;
@@ -211,6 +217,7 @@ public class HomeActivity extends AppCompatActivity {
 
     private void logout() {
         sessionManager.clearSession();
+        ApiClient.resetClient();
         Intent intent = new Intent(this, LoginActivity.class);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         startActivity(intent);

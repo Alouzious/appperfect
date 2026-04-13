@@ -49,12 +49,13 @@ public class PracticeActivity extends AppCompatActivity {
     private String deckId;
     private String deckTitle;
     private String csrfToken = "";
+    private static final String REFERER_URL = "https://pitch-perfect-api.onrender.com/";
 
     private MediaRecorder mediaRecorder;
     private File audioFile;
     private boolean isRecording = false;
     private int secondsElapsed = 0;
-    private Handler timerHandler = new Handler(Looper.getMainLooper());
+    private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private Runnable timerRunnable;
 
     private static final int PERMISSION_REQUEST_CODE = 100;
@@ -116,14 +117,14 @@ public class PracticeActivity extends AppCompatActivity {
     private void fetchCsrfToken() {
         ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
-            public void onResponse(Call<CsrfResponse> call,
-                                   Response<CsrfResponse> response) {
+            public void onResponse(@NonNull Call<CsrfResponse> call,
+                                   @NonNull Response<CsrfResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     csrfToken = response.body().getCsrfToken();
                 }
             }
             @Override
-            public void onFailure(Call<CsrfResponse> call, Throwable t) {}
+            public void onFailure(@NonNull Call<CsrfResponse> call, @NonNull Throwable t) {}
         });
     }
 
@@ -183,11 +184,9 @@ public class PracticeActivity extends AppCompatActivity {
                 deckId, pitchType, "pending", secondsElapsed, getTargetDuration(pitchType)
         );
 
-        ApiClient.getClient(this).createPracticeSession(
-                csrfToken, sessionManager.getSessionCookie(), request
-        ).enqueue(new Callback<PracticeSession>() {
+        ApiClient.getClient(this).createPracticeSession(csrfToken, REFERER_URL, request).enqueue(new Callback<PracticeSession>() {
             @Override
-            public void onResponse(Call<PracticeSession> call, Response<PracticeSession> response) {
+            public void onResponse(@NonNull Call<PracticeSession> call, @NonNull Response<PracticeSession> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     String sessionId = response.body().getId();
                     binding.tvProcessingStatus.setText("Sending audio to AI...");
@@ -197,7 +196,7 @@ public class PracticeActivity extends AppCompatActivity {
                 }
             }
             @Override
-            public void onFailure(Call<PracticeSession> call, Throwable t) {
+            public void onFailure(@NonNull Call<PracticeSession> call, @NonNull Throwable t) {
                 showError("Network error");
             }
         });
@@ -208,11 +207,9 @@ public class PracticeActivity extends AppCompatActivity {
         MultipartBody.Part audioPart = MultipartBody.Part.createFormData("audio", "practice.m4a", requestFile);
         RequestBody duration = RequestBody.create(MediaType.parse("text/plain"), String.valueOf(secondsElapsed));
 
-        ApiClient.getClient(this).submitPracticeAudio(
-                csrfToken, sessionManager.getSessionCookie(), sessionId, audioPart, duration
-        ).enqueue(new Callback<PracticeSession>() {
+        ApiClient.getClient(this).submitPracticeAudio(csrfToken, REFERER_URL, sessionId, audioPart, duration).enqueue(new Callback<PracticeSession>() {
             @Override
-            public void onResponse(Call<PracticeSession> call, Response<PracticeSession> response) {
+            public void onResponse(@NonNull Call<PracticeSession> call, @NonNull Response<PracticeSession> response) {
                 if (response.isSuccessful()) {
                     binding.tvProcessingStatus.setText("Analyzing with AI... This may take 10-15 seconds");
                     pollForFeedback(sessionId, 0);
@@ -221,7 +218,7 @@ public class PracticeActivity extends AppCompatActivity {
                 }
             }
             @Override
-            public void onFailure(Call<PracticeSession> call, Throwable t) {
+            public void onFailure(@NonNull Call<PracticeSession> call, @NonNull Throwable t) {
                 showError("Network error submitting audio");
             }
         });
@@ -233,44 +230,38 @@ public class PracticeActivity extends AppCompatActivity {
             return;
         }
 
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            ApiClient.getClient(this).getPracticeFeedback(
-                    sessionManager.getSessionCookie(), sessionId
-            ).enqueue(new Callback<PracticeFeedback>() {
-                @Override
-                public void onResponse(Call<PracticeFeedback> call, Response<PracticeFeedback> response) {
-                    if (response.isSuccessful() && response.body() != null) {
-                        PracticeFeedback feedback = response.body();
-                        if ("completed".equals(feedback.getStatus())) {
-                            // Go to feedback screen
-                            binding.layoutProcessing.setVisibility(View.GONE);
-                            Intent intent = new Intent(PracticeActivity.this, FeedbackActivity.class);
-                            intent.putExtra("session_id", sessionId);
-                            intent.putExtra("deck_id", deckId);
-                            startActivity(intent);
-                            loadPreviousSessions();
-                        } else {
-                            // Still processing — poll again
-                            pollForFeedback(sessionId, attempts + 1);
-                        }
+        new Handler(Looper.getMainLooper()).postDelayed(() -> ApiClient.getClient(this).getPracticeFeedback(sessionId).enqueue(new Callback<PracticeFeedback>() {
+            @Override
+            public void onResponse(@NonNull Call<PracticeFeedback> call, @NonNull Response<PracticeFeedback> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    PracticeFeedback feedback = response.body();
+                    if ("completed".equals(feedback.getStatus())) {
+                        // Go to feedback screen
+                        binding.layoutProcessing.setVisibility(View.GONE);
+                        Intent intent = new Intent(PracticeActivity.this, FeedbackActivity.class);
+                        intent.putExtra("session_id", sessionId);
+                        intent.putExtra("deck_id", deckId);
+                        startActivity(intent);
+                        loadPreviousSessions();
                     } else {
+                        // Still processing — poll again
                         pollForFeedback(sessionId, attempts + 1);
                     }
-                }
-                @Override
-                public void onFailure(Call<PracticeFeedback> call, Throwable t) {
+                } else {
                     pollForFeedback(sessionId, attempts + 1);
                 }
-            });
-        }, 3000); // poll every 3 seconds
+            }
+            @Override
+            public void onFailure(@NonNull Call<PracticeFeedback> call, @NonNull Throwable t) {
+                pollForFeedback(sessionId, attempts + 1);
+            }
+        }), 3000); // poll every 3 seconds
     }
 
     private void loadPreviousSessions() {
-        ApiClient.getClient(this).getPracticeSessions(
-                sessionManager.getSessionCookie(), deckId
-        ).enqueue(new Callback<PracticeListResponse>() {
+        ApiClient.getClient(this).getPracticeSessions(deckId).enqueue(new Callback<PracticeListResponse>() {
             @Override
-            public void onResponse(Call<PracticeListResponse> call, Response<PracticeListResponse> response) {
+            public void onResponse(@NonNull Call<PracticeListResponse> call, @NonNull Response<PracticeListResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     sessionList.clear();
                     sessionList.addAll(response.body().getResults());
@@ -278,7 +269,7 @@ public class PracticeActivity extends AppCompatActivity {
                 }
             }
             @Override
-            public void onFailure(Call<PracticeListResponse> call, Throwable t) {}
+            public void onFailure(@NonNull Call<PracticeListResponse> call, @NonNull Throwable t) {}
         });
     }
 
