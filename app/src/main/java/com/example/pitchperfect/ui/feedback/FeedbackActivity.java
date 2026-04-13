@@ -41,7 +41,7 @@ public class FeedbackActivity extends AppCompatActivity {
     }
 
     private void loadFeedback() {
-        ApiClient.getClient().getPracticeFeedback(
+        ApiClient.getClient(this).getPracticeFeedback(
                 sessionManager.getSessionCookie(), sessionId
         ).enqueue(new Callback<PracticeFeedback>() {
             @Override

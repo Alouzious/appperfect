@@ -28,7 +28,6 @@ public class RegisterActivity extends AppCompatActivity {
     private ActivityRegisterBinding binding;
     private SessionManager sessionManager;
     private String csrfToken = "";
-    private String sessionCookie = "";
     private static final String REFERER_URL = "https://pitch-perfect-api.onrender.com/";
 
     @Override
@@ -43,31 +42,11 @@ public class RegisterActivity extends AppCompatActivity {
     }
 
     private void fetchCsrfToken() {
-        ApiClient.getClient().getCsrfToken().enqueue(new Callback<CsrfResponse>() {
+        ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
             public void onResponse(Call<CsrfResponse> call, Response<CsrfResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    // Start with the token from the response body
                     csrfToken = response.body().getCsrfToken();
-                    
-                    // Capture all cookies and refine the CSRF token if present in cookies
-                    List<String> cookies = response.headers().values("Set-Cookie");
-                    if (cookies != null && !cookies.isEmpty()) {
-                        StringBuilder cookieBuilder = new StringBuilder();
-                        for (String cookie : cookies) {
-                            String cookiePart = cookie.split(";")[0];
-                            if (cookieBuilder.length() > 0) {
-                                cookieBuilder.append("; ");
-                            }
-                            cookieBuilder.append(cookiePart);
-                            
-                            // If the cookie contains the csrf token, use that one as it's more reliable for Django
-                            if (cookiePart.startsWith("csrftoken=")) {
-                                csrfToken = cookiePart.substring("csrftoken=".length());
-                            }
-                        }
-                        sessionCookie = cookieBuilder.toString();
-                    }
                 }
             }
             @Override
@@ -101,7 +80,7 @@ public class RegisterActivity extends AppCompatActivity {
         showLoading(true);
         hideError();
 
-        ApiClient.getClient().register(csrfToken, sessionCookie, REFERER_URL, new RegisterRequest(username, email, password))
+        ApiClient.getClient(this).register(csrfToken, "", REFERER_URL, new RegisterRequest(username, email, password))
                 .enqueue(new Callback<RegisterResponse>() {
                     @Override
                     public void onResponse(Call<RegisterResponse> call, Response<RegisterResponse> response) {

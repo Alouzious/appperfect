@@ -88,7 +88,7 @@ public class HomeActivity extends AppCompatActivity {
     }
 
     private void fetchCsrfToken() {
-        ApiClient.getClient().getCsrfToken().enqueue(new Callback<CsrfResponse>() {
+        ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
             public void onResponse(Call<CsrfResponse> call, Response<CsrfResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
@@ -104,7 +104,7 @@ public class HomeActivity extends AppCompatActivity {
         binding.progressBar.setVisibility(View.VISIBLE);
         String cookie = sessionManager.getSessionCookie();
 
-        ApiClient.getClient().getPitchDecks(cookie).enqueue(new Callback<PitchDeckListResponse>() {
+        ApiClient.getClient(this).getPitchDecks(cookie).enqueue(new Callback<PitchDeckListResponse>() {
             @Override
             public void onResponse(Call<PitchDeckListResponse> call, Response<PitchDeckListResponse> response) {
                 binding.progressBar.setVisibility(View.GONE);
@@ -150,7 +150,7 @@ public class HomeActivity extends AppCompatActivity {
             binding.progressBar.setVisibility(View.VISIBLE);
             binding.btnUploadDeck.setEnabled(false);
 
-            ApiClient.getClient().uploadPitchDeck(
+            ApiClient.getClient(this).uploadPitchDeck(
                     csrfToken,
                     sessionManager.getSessionCookie(),
                     filePart,

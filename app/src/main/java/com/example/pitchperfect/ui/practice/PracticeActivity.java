@@ -114,7 +114,7 @@ public class PracticeActivity extends AppCompatActivity {
     }
 
     private void fetchCsrfToken() {
-        ApiClient.getClient().getCsrfToken().enqueue(new Callback<CsrfResponse>() {
+        ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
             public void onResponse(Call<CsrfResponse> call,
                                    Response<CsrfResponse> response) {
@@ -183,7 +183,7 @@ public class PracticeActivity extends AppCompatActivity {
                 deckId, pitchType, "pending", secondsElapsed, getTargetDuration(pitchType)
         );
 
-        ApiClient.getClient().createPracticeSession(
+        ApiClient.getClient(this).createPracticeSession(
                 csrfToken, sessionManager.getSessionCookie(), request
         ).enqueue(new Callback<PracticeSession>() {
             @Override
@@ -208,7 +208,7 @@ public class PracticeActivity extends AppCompatActivity {
         MultipartBody.Part audioPart = MultipartBody.Part.createFormData("audio", "practice.m4a", requestFile);
         RequestBody duration = RequestBody.create(MediaType.parse("text/plain"), String.valueOf(secondsElapsed));
 
-        ApiClient.getClient().submitPracticeAudio(
+        ApiClient.getClient(this).submitPracticeAudio(
                 csrfToken, sessionManager.getSessionCookie(), sessionId, audioPart, duration
         ).enqueue(new Callback<PracticeSession>() {
             @Override
@@ -234,7 +234,7 @@ public class PracticeActivity extends AppCompatActivity {
         }
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            ApiClient.getClient().getPracticeFeedback(
+            ApiClient.getClient(this).getPracticeFeedback(
                     sessionManager.getSessionCookie(), sessionId
             ).enqueue(new Callback<PracticeFeedback>() {
                 @Override
@@ -266,7 +266,7 @@ public class PracticeActivity extends AppCompatActivity {
     }
 
     private void loadPreviousSessions() {
-        ApiClient.getClient().getPracticeSessions(
+        ApiClient.getClient(this).getPracticeSessions(
                 sessionManager.getSessionCookie(), deckId
         ).enqueue(new Callback<PracticeListResponse>() {
             @Override

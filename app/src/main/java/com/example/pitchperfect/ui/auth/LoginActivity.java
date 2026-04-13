@@ -14,8 +14,6 @@ import com.example.pitchperfect.models.LoginResponse;
 import com.example.pitchperfect.ui.home.HomeActivity;
 import com.example.pitchperfect.utils.SessionManager;
 
-import java.util.List;
-
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -25,7 +23,6 @@ public class LoginActivity extends AppCompatActivity {
     private ActivityLoginBinding binding;
     private SessionManager sessionManager;
     private String csrfToken = "";
-    private String sessionCookie = "";
     private static final String BASE_URL = "https://pitch-perfect-api.onrender.com/api/";
 
     @Override
@@ -47,24 +44,19 @@ public class LoginActivity extends AppCompatActivity {
     }
 
     private void fetchCsrfToken() {
-        ApiClient.getClient().getCsrfToken().enqueue(new Callback<CsrfResponse>() {
+        // Fetch CSRF token - this also initializes the session cookie
+        ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
             public void onResponse(Call<CsrfResponse> call, Response<CsrfResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
                     csrfToken = response.body().getCsrfToken();
                 }
-                // Save session cookie from response headers
-                List<String> cookies = response.headers().values("Set-Cookie");
-                StringBuilder cookieBuilder = new StringBuilder();
-                for (String cookie : cookies) {
-                    cookieBuilder.append(cookie.split(";")[0]).append("; ");
-                }
-                sessionCookie = cookieBuilder.toString();
             }
 
             @Override
             public void onFailure(Call<CsrfResponse> call, Throwable t) {
-                // Continue anyway, CSRF will be fetched on retry
+                // Log error but continue - CSRF can be retried
+                t.printStackTrace();
             }
         });
     }
@@ -92,39 +84,37 @@ public class LoginActivity extends AppCompatActivity {
         showLoading(true);
         hideError();
 
-        ApiClient.getClient().login(csrfToken, sessionCookie, BASE_URL, new LoginRequest(username, password))
-                .enqueue(new Callback<LoginResponse>() {
-                    @Override
-                    public void onResponse(Call<LoginResponse> call, Response<LoginResponse> response) {
-                        showLoading(false);
-                        if (response.isSuccessful() && response.body() != null) {
-                            // Save session cookie
-                            List<String> cookies = response.headers().values("Set-Cookie");
-                            StringBuilder cookieBuilder = new StringBuilder();
-                            for (String cookie : cookies) {
-                                cookieBuilder.append(cookie.split(";")[0]).append("; ");
-                            }
-                            String fullCookie = cookieBuilder.toString();
+        // OkHttp now automatically handles cookies via cookieJar
+        // Just pass CSRF token, cookie header (empty - handled by OkHttp), and referer
+        ApiClient.getClient(this).login(
+                csrfToken,
+                "", // Cookie header is handled automatically by OkHttp
+                BASE_URL,
+                new LoginRequest(username, password)
+        ).enqueue(new Callback<LoginResponse>() {
+            @Override
+            public void onResponse(Call<LoginResponse> call, Response<LoginResponse> response) {
+                showLoading(false);
+                if (response.isSuccessful() && response.body() != null) {
+                    LoginResponse loginResponse = response.body();
+                    sessionManager.saveSession(
+                            loginResponse.getUser().getUsername(),
+                            loginResponse.getUser().getEmail(),
+                            loginResponse.getUser().getId()
+                    );
+                    goToHome();
+                } else {
+                    showError("Invalid username or password");
+                }
+            }
 
-                            LoginResponse loginResponse = response.body();
-                            sessionManager.saveSession(
-                                    loginResponse.getUser().getUsername(),
-                                    loginResponse.getUser().getEmail(),
-                                    loginResponse.getUser().getId()
-                            );
-                            sessionManager.saveSessionCookie(fullCookie);
-                            goToHome();
-                        } else {
-                            showError("Invalid username or password");
-                        }
-                    }
-
-                    @Override
-                    public void onFailure(Call<LoginResponse> call, Throwable t) {
-                        showLoading(false);
-                        showError("Network error. Check your connection.");
-                    }
-                });
+            @Override
+            public void onFailure(Call<LoginResponse> call, Throwable t) {
+                showLoading(false);
+                showError("Network error: " + t.getMessage());
+                t.printStackTrace();
+            }
+        });
     }
 
     private void goToHome() {
