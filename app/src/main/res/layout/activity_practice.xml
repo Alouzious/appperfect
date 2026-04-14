@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F8F9FA">
+    android:background="#FFFFFF">
 
     <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
@@ -13,15 +13,17 @@
             android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
-            android:background="#6C63FF"
-            app:title="Practice Your Pitch"
-            app:titleTextColor="#FFFFFF" />
+            android:background="#FFFFFF"
+            app:title="@string/toolbar_title"
+            app:titleTextColor="#111827"
+            app:elevation="0dp" />
 
     </com.google.android.material.appbar.AppBarLayout>
 
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:background="#F9FAFB"
         android:fillViewport="true"
         app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
@@ -29,40 +31,34 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="24dp">
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="32dp">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Select pitch type and start recording"
-                android:textSize="14sp"
-                android:textColor="#6C757D"
-                android:layout_marginBottom="24dp" />
-
-            <!-- Pitch Type Selector -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Pitch Type"
+                android:text="@string/choose_style"
                 android:textSize="16sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A2E"
-                android:layout_marginBottom="8dp" />
+                android:textColor="#111827"
+                android:letterSpacing="0.005"
+                android:layout_marginBottom="12dp" />
 
             <Spinner
                 android:id="@+id/spinnerPitchType"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:background="@drawable/spinner_background"
+                android:background="#FFFFFF"
                 android:layout_marginBottom="24dp"
-                android:padding="8dp" />
+                android:padding="12dp" />
 
-            <!-- Timer and Transcript Card -->
             <androidx.cardview.widget.CardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="16dp"
-                app:cardElevation="4dp"
+                app:cardElevation="1dp"
                 android:layout_marginBottom="24dp">
 
                 <LinearLayout
@@ -70,81 +66,93 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:gravity="center"
-                    android:padding="24dp">
+                    android:padding="24dp"
+                    android:background="#FFFFFF">
 
                     <TextView
                         android:id="@+id/tvTimer"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="00:00"
-                        android:textSize="48sp"
+                        android:text="@string/timer_default"
+                        android:textSize="56sp"
                         android:textStyle="bold"
-                        android:textColor="#6C63FF"
+                        android:textColor="#111827"
+                        android:letterSpacing="0.01"
                         android:layout_marginBottom="8dp" />
 
                     <TextView
                         android:id="@+id/tvRecordingStatus"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Ready to record"
+                        android:text="@string/status_ready"
                         android:textSize="14sp"
-                        android:textColor="#6C757D"
+                        android:textColor="#6B7280"
                         android:layout_marginBottom="16dp" />
 
                     <View
                         android:layout_width="match_parent"
                         android:layout_height="1dp"
-                        android:background="#E0E0E0"
+                        android:background="#E5E7EB"
                         android:layout_marginBottom="16dp" />
 
                     <TextView
                         android:id="@+id/tvTranscript"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:minHeight="60dp"
-                        android:text="Transcript will appear here..."
-                        android:textSize="16sp"
-                        android:textColor="#1A1A2E"
+                        android:minHeight="80dp"
+                        android:text="@string/transcript_hint"
+                        android:textSize="15sp"
+                        android:textColor="#374151"
                         android:textStyle="italic"
-                        android:gravity="center" />
+                        android:gravity="center"
+                        android:padding="8dp" />
 
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Record Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnRecord"
                 android:layout_width="match_parent"
-                android:layout_height="64dp"
-                android:text="🎙 Start Recording"
-                android:textSize="18sp"
-                android:backgroundTint="#6C63FF"
-                android:layout_marginBottom="12dp" />
+                android:layout_height="56dp"
+                android:text="@string/btn_begin"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#6366F1"
+                android:layout_marginBottom="12dp"
+                app:icon="@drawable/ic_microphone"
+                app:iconGravity="textStart"
+                app:iconSize="24dp"
+                app:cornerRadius="12dp" />
 
-            <!-- Stop Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnStop"
                 android:layout_width="match_parent"
-                android:layout_height="64dp"
-                android:text="⏹ Stop Recording"
-                android:textSize="18sp"
-                android:backgroundTint="#DC3545"
+                android:layout_height="56dp"
+                android:text="@string/btn_stop"
+                android:textSize="16sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#EF4444"
                 android:layout_marginBottom="12dp"
-                android:enabled="false" />
+                android:enabled="false"
+                app:icon="@drawable/ic_stop"
+                app:iconGravity="textStart"
+                app:iconSize="24dp"
+                app:cornerRadius="12dp" />
 
-            <!-- Mock Data Button -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnMockData"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:text="✨ Test with Mock Data"
-                android:textSize="16sp"
-                android:backgroundTint="#28A745"
+                android:text="@string/btn_mock"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#10B981"
                 android:layout_marginBottom="24dp"
-                app:strokeColor="#FFFFFF"
-                app:strokeWidth="1dp" />
+                android:visibility="gone"
+                app:icon="@drawable/ic_feedback"
+                app:iconGravity="textStart"
+                app:cornerRadius="12dp" />
 
-            <!-- Processing state -->
             <LinearLayout
                 android:id="@+id/layoutProcessing"
                 android:layout_width="match_parent"
@@ -152,31 +160,34 @@
                 android:orientation="vertical"
                 android:gravity="center"
                 android:visibility="gone"
-                android:layout_marginBottom="16dp">
+                android:layout_marginBottom="24dp">
 
                 <ProgressBar
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp" />
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:layout_marginBottom="12dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="#6366F1" />
 
                 <TextView
                     android:id="@+id/tvProcessingStatus"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Transcribing your pitch..."
+                    android:text="@string/processing_status"
                     android:textSize="14sp"
-                    android:textColor="#6C63FF" />
+                    android:textColor="#6B7280"
+                    android:textStyle="italic" />
             </LinearLayout>
 
-            <!-- Previous sessions -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Previous Sessions"
-                android:textSize="16sp"
+                android:text="@string/pitch_journey"
+                android:textSize="18sp"
                 android:textStyle="bold"
-                android:textColor="#1A1A2E"
-                android:layout_marginBottom="8dp" />
+                android:textColor="#111827"
+                android:letterSpacing="0.005"
+                android:layout_marginBottom="12dp" />
 
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvSessions"
@@ -186,4 +197,5 @@
 
         </LinearLayout>
     </ScrollView>
+
 </androidx.coordinatorlayout.widget.CoordinatorLayout>

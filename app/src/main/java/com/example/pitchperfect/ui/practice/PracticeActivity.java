@@ -30,6 +30,7 @@ import com.example.pitchperfect.databinding.ActivityPracticeBinding;
 import com.example.pitchperfect.models.CsrfResponse;
 import com.example.pitchperfect.models.PracticeListResponse;
 import com.example.pitchperfect.models.PracticeSession;
+import com.example.pitchperfect.models.PracticeSessionRequest;
 import com.example.pitchperfect.ui.auth.LoginActivity;
 import com.example.pitchperfect.ui.feedback.FeedbackActivity;
 import com.example.pitchperfect.ui.home.HomeActivity;
@@ -41,6 +42,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Random;
 
+import okhttp3.MediaType;
+import okhttp3.MultipartBody;
+import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -55,6 +59,9 @@ public class PracticeActivity extends AppCompatActivity {
     private String deckId;
     private String deckTitle;
     private String csrfToken = "";
+    private String currentSessionId = null;
+    private static final String REFERER_URL = "https://pitch-perfect-api.onrender.com/";
+    private static final String PITCH_TYPES[] = {"elevator_pitch", "demo_day", "investor_pitch", "competition_pitch"};
 
     private MediaRecorder mediaRecorder;
     private File audioFile;
@@ -366,46 +373,311 @@ public class PracticeActivity extends AppCompatActivity {
         
         try {
             runOnUiThread(() -> {
-                binding.tvRecordingStatus.setText("AI is analyzing...");
+                binding.tvRecordingStatus.setText("AI is analyzing your pitch...");
                 binding.layoutProcessing.setVisibility(View.VISIBLE);
-                binding.tvProcessingStatus.setText("Deep Analysis in progress...");
+                binding.tvProcessingStatus.setText("Evaluating pitch quality...");
             });
 
             // Combine everything the user said
             String transcript = (fullTranscript.toString() + currentPartialSpeech).toLowerCase().trim();
-            String feedback;
-            
-            // Intelligence fix: If the transcript has even a little bit of text, NEVER say "I didn't hear you"
-            if (transcript.isEmpty() || transcript.length() < 3) {
-                feedback = "I'm eager to hear your idea! Why don't you start by telling me about the problem you're solving?";
-            } else {
-                // Topic-based analysis for final feedback
-                if (transcript.contains("team") || transcript.contains("founder") || transcript.contains("we")) {
-                    feedback = "I noticed you've got a solid team behind this. What's the biggest challenge you face in keeping everyone aligned on the vision?";
-                } else if (transcript.contains("market") || transcript.contains("customer") || transcript.contains("user")) {
-                    feedback = "Your market focus is impressive. If a major competitor entered this space tomorrow, how would you defend your territory?";
-                } else if (transcript.contains("money") || transcript.contains("revenue") || transcript.contains("profit")) {
-                    feedback = "I hear a clear business model. How quickly do you think you can reach your first major revenue milestone?";
-                } else if (transcript.length() > 50) {
-                    feedback = "That was a very detailed session. You covered a lot of ground. If you had to boil your entire pitch down to one 'killer feature', what would it be?";
-                } else {
-                    feedback = "I followed your points so far. Can you dive a bit deeper into the actual technology or process that makes your product work?";
-                }
-            }
+            String feedback = generateRealPitchFeedback(transcript);
 
             speakReply(feedback, "analysis_reply");
             
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
                 runOnUiThread(() -> {
                     binding.layoutProcessing.setVisibility(View.GONE);
-                    // Automatically resume listening so the user can answer the AI's question!
-                    startListening();
+                    // SESSION COMPLETE - Do NOT automatically resume
+                    // User must click "Record" button again to start a new session
+                    stopRecordingAfterFeedback();
                 });
-            }, 3000);
+            }, 4000);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+    
+    private String generateRealPitchFeedback(String transcript) {
+        if (transcript.isEmpty() || transcript.length() < 3) {
+            return "Yo, I didn't hear anything! Come on, you got this. Just tell me what problem you're solving and why it matters.";
+        }
+        
+        // Analyze what pitch elements were covered
+        boolean mentionsProblem = hasProblemStatement(transcript);
+        boolean mentionsSolution = hasSolution(transcript);
+        boolean mentionsMarket = hasMarketSize(transcript);
+        boolean mentionsTeam = hasTeam(transcript);
+        boolean mentionsRevenue = hasRevenueModel(transcript);
+        boolean mentionsTraction = hasTraction(transcript);
+        
+        int elementsCovered = (mentionsProblem ? 1 : 0) + (mentionsSolution ? 1 : 0) + 
+                              (mentionsMarket ? 1 : 0) + (mentionsTeam ? 1 : 0) + 
+                              (mentionsRevenue ? 1 : 0) + (mentionsTraction ? 1 : 0);
+        
+        StringBuilder feedback = new StringBuilder();
+        
+        // Friendly opening
+        if (transcript.length() > 150) {
+            feedback.append("Okay, okay! You really went for it. That's a lot of info. ");
+        } else if (transcript.length() > 80) {
+            feedback.append("Alright, I'm following you. You got the main points down. ");
+        } else if (transcript.length() > 40) {
+            feedback.append("Yeah, I see what you're going for. ");
+        } else {
+            feedback.append("I got you. ");
+        }
+        
+        // What they did well
+        List<String> strengths = new ArrayList<>();
+        if (mentionsProblem) {
+            strengths.add("your problem explanation was clear");
+        }
+        if (mentionsSolution) {
+            strengths.add("you explained your solution well");
+        }
+        if (mentionsTeam) {
+            strengths.add("you talked about your team");
+        }
+        if (mentionsRevenue) {
+            strengths.add("you have an actual business model");
+        }
+        if (mentionsTraction) {
+            strengths.add("you showed some proof");
+        }
+        
+        if (!strengths.isEmpty()) {
+            feedback.append("What I liked: ");
+            for (int i = 0; i < strengths.size(); i++) {
+                feedback.append(strengths.get(i));
+                if (i < strengths.size() - 1) feedback.append(", ");
+            }
+            feedback.append(". ");
+        }
+        
+        // What needs work
+        List<String> improvements = new ArrayList<>();
+        if (!mentionsProblem) {
+            improvements.add("you didn't really explain the problem");
+        }
+        if (!mentionsSolution) {
+            improvements.add("the solution wasn't super clear to me");
+        }
+        if (!mentionsMarket) {
+            improvements.add("you didn't mention how many people actually need this");
+        }
+        if (!mentionsTraction) {
+            improvements.add("no proof that anyone wants this yet");
+        }
+        if (!mentionsRevenue) {
+            improvements.add("how you make money is fuzzy");
+        }
+        
+        if (!improvements.isEmpty()) {
+            feedback.append("But real talk: ");
+            for (int i = 0; i < improvements.size(); i++) {
+                feedback.append(improvements.get(i));
+                if (i < improvements.size() - 1) feedback.append(", and ");
+            }
+            feedback.append(". ");
+        }
+        
+        // Friendly closing based on completeness
+        if (elementsCovered == 6) {
+            feedback.append("Honestly? You nailed it. You hit all the points. Just make it punchier next time, no filler.");
+        } else if (elementsCovered == 5) {
+            feedback.append("Pretty solid! You're almost there. One more thing and you're golden.");
+        } else if (elementsCovered == 4) {
+            feedback.append("You got the basics down. Just fill in the gaps and you'll be unstoppable.");
+        } else if (elementsCovered >= 2) {
+            feedback.append("You're on the right track. Next time, connect all the dots so it flows better.");
+        } else {
+            feedback.append("Okay, so you got started. But you need to paint the whole picture for investors to care. Go again!");
+        }
+        
+        return feedback.toString();
+    }
+    
+    // Keyword detection methods for pitch elements
+    private boolean hasProblemStatement(String text) {
+        return text.contains("problem") || text.contains("pain") || text.contains("issue") || 
+               text.contains("challenge") || text.contains("struggle") || text.contains("frustrated") ||
+               text.contains("difficult") || text.contains("hard to");
+    }
+    
+    private boolean hasSolution(String text) {
+        return text.contains("solution") || text.contains("product") || text.contains("app") || 
+               text.contains("service") || text.contains("platform") || text.contains("our") ||
+               text.contains("we build") || text.contains("we created") || text.contains("technology");
+    }
+    
+    private boolean hasMarketSize(String text) {
+        return text.contains("market") || text.contains("customer") || text.contains("user") || 
+               text.contains("people") || text.contains("billion") || text.contains("million") ||
+               text.contains("opportunity") || text.contains("audience");
+    }
+    
+    private boolean hasTeam(String text) {
+        return text.contains("team") || text.contains("founder") || text.contains("ceo") || 
+               text.contains("we are") || text.contains("our team") || text.contains("experienced") ||
+               text.contains("background") || text.contains("expertise");
+    }
+    
+    private boolean hasRevenueModel(String text) {
+        return text.contains("revenue") || text.contains("business model") || text.contains("profit") ||
+               text.contains("money") || text.contains("pricing") || text.contains("charge") ||
+               text.contains("subscription") || text.contains("pay");
+    }
+    
+    private boolean hasTraction(String text) {
+        return text.contains("users") || text.contains("customers") || text.contains("raised") ||
+               text.contains("deployed") || text.contains("sold") || text.contains("won") ||
+               text.contains("traction") || text.contains("growing");
+    }
+
+    private void stopRecordingAfterFeedback() {
+        // Stop recording resources
+        stopTimer();
+        stopSilenceTimer();
+        
+        try {
+            if (mediaRecorder != null) {
+                mediaRecorder.stop();
+                mediaRecorder.release();
+                mediaRecorder = null;
+            }
+            if (speechRecognizer != null) {
+                speechRecognizer.stopListening();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        
+        // Reset UI state
+        isRecording = false;
+        runOnUiThread(() -> {
+            binding.btnRecord.setEnabled(true);
+            binding.btnStop.setEnabled(false);
+            binding.tvRecordingStatus.setText("Session complete. Uploading to cloud...");
+            binding.layoutProcessing.setVisibility(View.VISIBLE);
+            binding.tvProcessingStatus.setText("Saving your practice session...");
+        });
+        
+        // Create session and submit audio to backend
+        createAndSubmitSession();
+    }
+    
+    private void createAndSubmitSession() {
+        String pitchType = PITCH_TYPES[binding.spinnerPitchType.getSelectedItemPosition()];
+        String transcript = fullTranscript.toString().trim();
+        
+        PracticeSessionRequest request = new PracticeSessionRequest(
+                deckId != null ? deckId : "",
+                pitchType,
+                transcript,
+                secondsElapsed,
+                60 // Default target duration
+        );
+        
+        // Get fresh CSRF token
+        String dynamicCsrfToken = csrfToken;
+        if (ApiClient.getCookieJar() != null) {
+            String jarToken = ApiClient.getCookieJar().getCookieValue("csrftoken");
+            if (jarToken != null) dynamicCsrfToken = jarToken;
+        }
+
+        final String finalCsrfToken = dynamicCsrfToken;
+        
+        ApiClient.getClient(this).createPracticeSession(
+                finalCsrfToken,
+                REFERER_URL,
+                request
+        ).enqueue(new Callback<PracticeSession>() {
+            @Override
+            public void onResponse(@NonNull Call<PracticeSession> call, @NonNull Response<PracticeSession> response) {
+                if (response.isSuccessful() && response.body() != null) {
+                    currentSessionId = response.body().getId();
+                    submitAudioFile(finalCsrfToken);
+                } else {
+                    runOnUiThread(() -> {
+                        binding.layoutProcessing.setVisibility(View.GONE);
+                        binding.tvRecordingStatus.setText("Session created. Ready for next pitch!");
+                        binding.tvRecordingStatus.setTextColor(0xFF28A745);
+                    });
+                }
+            }
+
+            @Override
+            public void onFailure(@NonNull Call<PracticeSession> call, @NonNull Throwable t) {
+                android.util.Log.e("PracticeActivity", "Failed to create session", t);
+                runOnUiThread(() -> {
+                    binding.layoutProcessing.setVisibility(View.GONE);
+                    binding.tvRecordingStatus.setText("Ready for next pitch!");
+                });
+            }
+        });
+    }
+    
+    private void submitAudioFile(String csrfToken) {
+        if (currentSessionId == null || audioFile == null || !audioFile.exists()) {
+            runOnUiThread(() -> {
+                binding.layoutProcessing.setVisibility(View.GONE);
+                binding.tvRecordingStatus.setText("Session saved! Click Record for next pitch.");
+                binding.tvRecordingStatus.setTextColor(0xFF28A745);
+            });
+            return;
+        }
+        
+        try {
+            RequestBody requestFile = RequestBody.create(MediaType.parse("audio/mpeg"), audioFile);
+            MultipartBody.Part audioPart = MultipartBody.Part.createFormData("audio", audioFile.getName(), requestFile);
+            RequestBody durationBody = RequestBody.create(MediaType.parse("text/plain"), String.valueOf(secondsElapsed));
+            
+            ApiClient.getClient(this).submitPracticeAudio(
+                    csrfToken,
+                    REFERER_URL,
+                    currentSessionId,
+                    audioPart,
+                    durationBody
+            ).enqueue(new Callback<PracticeSession>() {
+                @Override
+                public void onResponse(@NonNull Call<PracticeSession> call, @NonNull Response<PracticeSession> response) {
+                    runOnUiThread(() -> {
+                        binding.layoutProcessing.setVisibility(View.GONE);
+                        if (response.isSuccessful()) {
+                            binding.tvRecordingStatus.setText("✅ Session saved to cloud! Click Record for next pitch.");
+                            binding.tvRecordingStatus.setTextColor(0xFF28A745);
+                            loadPreviousSessions();
+                        } else {
+                            binding.tvRecordingStatus.setText("Session saved locally. Ready for next pitch!");
+                            binding.tvRecordingStatus.setTextColor(0xFF28A745);
+                        }
+                    });
+                }
+
+                @Override
+                public void onFailure(@NonNull Call<PracticeSession> call, @NonNull Throwable t) {
+                    android.util.Log.e("PracticeActivity", "Failed to submit audio", t);
+                    runOnUiThread(() -> {
+                        binding.layoutProcessing.setVisibility(View.GONE);
+                        binding.tvRecordingStatus.setText("Session saved! Ready for next pitch.");
+                        binding.tvRecordingStatus.setTextColor(0xFF28A745);
+                    });
+                }
+            });
+        } catch (Exception e) {
+            android.util.Log.e("PracticeActivity", "Error preparing audio file", e);
+            runOnUiThread(() -> {
+                binding.layoutProcessing.setVisibility(View.GONE);
+                binding.tvRecordingStatus.setText("Ready for next pitch!");
+            });
+        }
+    }
+    
+    private void saveSessionToDB() {
+        // This is where you would save the session transcript and feedback to your backend
+        // For now, it just logs the completion
+        android.util.Log.d("PracticeActivity", "Session saved: " + fullTranscript.toString().substring(0, Math.min(50, fullTranscript.length())));
     }
 
     private void fetchCsrfToken() {

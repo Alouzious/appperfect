@@ -65,3 +65,15 @@ dependencies {
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
 }
+
+tasks.register("fixDuplicateIcons") {
+    doLast {
+        val resDir = file("src/main/res")
+        resDir.walkTopDown().forEach { file ->
+            if (file.name == "ic_launcher.webp") {
+                println("Deleting duplicate: ${file.absolutePath}")
+                file.delete()
+            }
+        }
+    }
+}

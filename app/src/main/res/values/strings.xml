@@ -1,3 +1,22 @@
 <resources>
     <string name="app_name">PitchPerfect</string>
-</resources>
+    <string name="toolbar_title">Perfect Your Pitch</string>
+    <string name="choose_style">Choose Your Style</string>
+    <string name="timer_default">00:00</string>
+    <string name="status_ready">Ready to shine ✨</string>
+    <string name="transcript_hint">Your words will shine here&#8230;</string>
+    <string name="btn_begin">Begin Pitching</string>
+    <string name="btn_stop">Stop &amp; Review</string>
+    <string name="btn_mock">Test with Mock Data</string>
+    <string name="processing_status">Crafting your feedback&#8230;</string>
+    <string name="pitch_journey">Your Pitch Journey</string>    <string name="welcome_title">Welcome back!</string>
+    <string name="welcome_subtitle">Master your delivery. Captivate your audience.</string>
+    <string name="quick_pitch_title">Quick Pitch</string>
+    <string name="quick_pitch_subtitle">Get expert feedback in seconds</string>
+    <string name="quick_pitch_btn">Begin</string>
+    <string name="upload_title">Level Up Your Presentation</string>
+    <string name="upload_subtitle">Import slides and practice like a pro with AI guidance</string>
+    <string name="upload_btn">Choose File</string>
+    <string name="presentations_title">Your Presentations</string>
+    <string name="empty_state_title">No presentations yet</string>
+    <string name="empty_state_subtitle">Upload your first presentation to get started</string></resources>
