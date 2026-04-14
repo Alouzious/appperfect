@@ -54,11 +54,23 @@
             android:id="@+id/btnUploadDeck"
             android:layout_width="match_parent"
             android:layout_height="56dp"
-            android:text="+ Upload Pitch Deck"
+            android:text="Upload Pitch Deck"
             android:textSize="16sp"
             android:backgroundTint="#6C63FF"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="12dp"
             app:icon="@android:drawable/ic_menu_upload" />
+
+        <!-- Demo Practice button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnDemoPractice"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Try Demo Practice"
+            android:textSize="16sp"
+            android:backgroundTint="#28A745"
+            android:layout_marginBottom="16dp"
+            app:icon="@android:drawable/ic_menu_view"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
 
         <!-- Empty state -->
         <LinearLayout

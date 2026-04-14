@@ -10,21 +10,28 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AlertDialog;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
 import com.example.pitchperfect.api.ApiClient;
+import com.example.pitchperfect.data.MockDataRepository;
 import com.example.pitchperfect.databinding.ActivityHomeBinding;
 import com.example.pitchperfect.models.CsrfResponse;
+import com.example.pitchperfect.models.DemoPitch;
 import com.example.pitchperfect.models.PitchDeck;
 import com.example.pitchperfect.models.PitchDeckListResponse;
 import com.example.pitchperfect.ui.auth.LoginActivity;
+import com.example.pitchperfect.ui.practice.PracticeActivity;
 import com.example.pitchperfect.utils.SessionManager;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import okhttp3.MediaType;
 import okhttp3.MultipartBody;
@@ -40,6 +47,7 @@ public class HomeActivity extends AppCompatActivity {
     private DeckAdapter deckAdapter;
     private List<PitchDeck> deckList = new ArrayList<>();
     private String csrfToken = "";
+    private boolean csrfFetchInProgress = false;
 
     private ActivityResultLauncher<String[]> filePickerLauncher;
 
@@ -51,6 +59,9 @@ public class HomeActivity extends AppCompatActivity {
 
         sessionManager = new SessionManager(this);
         setSupportActionBar(binding.toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle("Pitch Perfect");
+        }
 
         // Set welcome message
         binding.tvWelcome.setText("Welcome, " + sessionManager.getUsername() + "!");
@@ -85,18 +96,61 @@ public class HomeActivity extends AppCompatActivity {
                         "application/vnd.ms-powerpoint"
                 })
         );
+
+        // Add demo practice button if it exists
+        if (binding.btnDemoPractice != null) {
+            binding.btnDemoPractice.setOnClickListener(v -> showDemoPitchesDialog());
+        }
+    }
+
+    private void showDemoPitchesDialog() {
+        DemoPitch[] demoPitches = DemoPitch.getDemoPitches();
+        String[] titles = new String[demoPitches.length];
+        for (int i = 0; i < demoPitches.length; i++) {
+            titles[i] = demoPitches[i].getTitle();
+        }
+
+        new AlertDialog.Builder(this)
+                .setTitle("Choose a Demo Pitch")
+                .setItems(titles, (dialog, which) -> {
+                    DemoPitch selected = demoPitches[which];
+                    startDemoPractice(selected);
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void startDemoPractice(DemoPitch demoPitch) {
+        Intent intent = new Intent(this, PracticeActivity.class);
+        intent.putExtra("deck_id", demoPitch.getId());
+        intent.putExtra("deck_title", demoPitch.getTitle());
+        intent.putExtra("is_demo", true);
+        intent.putExtra("demo_description", demoPitch.getDescription());
+        startActivity(intent);
     }
 
     private void fetchCsrfToken() {
+        fetchCsrfToken(null);
+    }
+
+    private void fetchCsrfToken(Runnable onComplete) {
+        if (csrfFetchInProgress) return;
+        csrfFetchInProgress = true;
         ApiClient.getClient().getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
             public void onResponse(Call<CsrfResponse> call, Response<CsrfResponse> response) {
+                csrfFetchInProgress = false;
                 if (response.isSuccessful() && response.body() != null) {
                     csrfToken = response.body().getCsrfToken();
                 }
+                storeCookiesFromResponse(response);
+                if (onComplete != null) onComplete.run();
             }
             @Override
-            public void onFailure(Call<CsrfResponse> call, Throwable t) {}
+            public void onFailure(Call<CsrfResponse> call, Throwable t) {
+                csrfFetchInProgress = false;
+                if (onComplete != null) onComplete.run();
+            }
         });
     }
 
@@ -115,18 +169,45 @@ public class HomeActivity extends AppCompatActivity {
                     binding.layoutEmpty.setVisibility(deckList.isEmpty() ? View.VISIBLE : View.GONE);
                 } else if (response.code() == 403) {
                     logout();
+                } else {
+                    // Fallback to mock data
+                    loadMockDecks();
                 }
             }
 
             @Override
             public void onFailure(Call<PitchDeckListResponse> call, Throwable t) {
                 binding.progressBar.setVisibility(View.GONE);
-                Toast.makeText(HomeActivity.this, "Failed to load decks", Toast.LENGTH_SHORT).show();
+                // Fallback to mock data on network error
+                loadMockDecks();
             }
         });
     }
 
+    private void loadMockDecks() {
+        deckList.clear();
+        deckList.addAll(MockDataRepository.getMockPitchDecks());
+        deckAdapter.notifyDataSetChanged();
+        binding.layoutEmpty.setVisibility(View.GONE);
+        
+        // Show a subtle notification that demo data is loaded
+        Toast.makeText(this, "Using demo data (offline mode)", Toast.LENGTH_SHORT).show();
+    }
+
     private void uploadDeck(Uri uri) {
+        if (csrfToken == null || csrfToken.isEmpty()) {
+            Toast.makeText(this, "Getting security token...", Toast.LENGTH_SHORT).show();
+            fetchCsrfToken(() -> {
+                if (csrfToken != null && !csrfToken.isEmpty()) {
+                    runOnUiThread(() -> uploadDeck(uri));
+                } else {
+                    runOnUiThread(() -> Toast.makeText(HomeActivity.this,
+                            "Could not get CSRF token. Please try again.", Toast.LENGTH_SHORT).show());
+                }
+            });
+            return;
+        }
+
         try {
             InputStream inputStream = getContentResolver().openInputStream(uri);
             String fileName = getFileName(uri);
@@ -143,6 +224,9 @@ public class HomeActivity extends AppCompatActivity {
             inputStream.close();
 
             String mimeType = getContentResolver().getType(uri);
+            if (mimeType == null || mimeType.isEmpty()) {
+                mimeType = "application/octet-stream";
+            }
             RequestBody requestFile = RequestBody.create(MediaType.parse(mimeType), tempFile);
             MultipartBody.Part filePart = MultipartBody.Part.createFormData("file", fileName, requestFile);
             RequestBody titleBody = RequestBody.create(MediaType.parse("text/plain"), fileName.replace(".pptx", "").replace(".pdf", ""));
@@ -164,7 +248,12 @@ public class HomeActivity extends AppCompatActivity {
                         Toast.makeText(HomeActivity.this, "Deck uploaded! Processing...", Toast.LENGTH_SHORT).show();
                         loadDecks();
                     } else {
-                        Toast.makeText(HomeActivity.this, "Upload failed", Toast.LENGTH_SHORT).show();
+                        String backendError = readErrorBody(response);
+                        String message = "Upload failed (" + response.code() + ")";
+                        if (backendError != null && !backendError.isEmpty()) {
+                            message = message + ": " + backendError;
+                        }
+                        Toast.makeText(HomeActivity.this, message, Toast.LENGTH_LONG).show();
                     }
                 }
 
@@ -178,6 +267,53 @@ public class HomeActivity extends AppCompatActivity {
 
         } catch (Exception e) {
             Toast.makeText(this, "Error reading file", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void storeCookiesFromResponse(Response<?> response) {
+        List<String> cookies = response.headers().values("Set-Cookie");
+        if (cookies == null || cookies.isEmpty()) return;
+
+        String existing = sessionManager.getSessionCookie();
+        String merged = mergeCookies(existing, cookies);
+        sessionManager.saveSessionCookie(merged);
+    }
+
+    private String mergeCookies(String existingCookieHeader, List<String> setCookieHeaders) {
+        Map<String, String> cookieMap = new LinkedHashMap<>();
+
+        if (existingCookieHeader != null && !existingCookieHeader.trim().isEmpty()) {
+            String[] existingPairs = existingCookieHeader.split(";");
+            for (String pair : existingPairs) {
+                String trimmed = pair.trim();
+                if (trimmed.isEmpty() || !trimmed.contains("=")) continue;
+                int idx = trimmed.indexOf('=');
+                cookieMap.put(trimmed.substring(0, idx).trim(), trimmed.substring(idx + 1).trim());
+            }
+        }
+
+        for (String header : setCookieHeaders) {
+            if (header == null || header.trim().isEmpty()) continue;
+            String firstPart = header.split(";")[0].trim();
+            if (!firstPart.contains("=")) continue;
+            int idx = firstPart.indexOf('=');
+            cookieMap.put(firstPart.substring(0, idx).trim(), firstPart.substring(idx + 1).trim());
+        }
+
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<String, String> entry : cookieMap.entrySet()) {
+            builder.append(entry.getKey()).append("=").append(entry.getValue()).append("; ");
+        }
+        return builder.toString();
+    }
+
+    private String readErrorBody(Response<?> response) {
+        try {
+            if (response.errorBody() == null) return "";
+            String raw = response.errorBody().string();
+            return raw.length() > 160 ? raw.substring(0, 160) + "..." : raw;
+        } catch (IOException e) {
+            return "";
         }
     }
 

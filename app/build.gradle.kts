@@ -61,6 +61,9 @@ dependencies {
     // Circular progress bar for scores display
     implementation("com.mikhaellopez:circularprogressbar:3.1.0")
 
+    // Material Icons
+    implementation("androidx.compose.material:material-icons-extended:1.6.7")
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

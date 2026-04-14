@@ -16,13 +16,15 @@
         android:gravity="center_vertical">
 
         <!-- Icon -->
-        <TextView
+        <ImageView
+            android:id="@+id/ivStatusIcon"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:text="📊"
-            android:textSize="24sp"
-            android:gravity="center"
-            android:layout_marginEnd="16dp" />
+            android:src="@android:drawable/ic_dialog_info"
+            android:scaleType="centerInside"
+            android:contentDescription="Deck status"
+            android:layout_marginEnd="16dp"
+            android:tint="#6C63FF" />
 
         <!-- Info -->
         <LinearLayout

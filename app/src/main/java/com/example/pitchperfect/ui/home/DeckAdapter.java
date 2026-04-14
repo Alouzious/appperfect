@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -39,11 +40,19 @@ public class DeckAdapter extends RecyclerView.Adapter<DeckAdapter.DeckViewHolder
         PitchDeck deck = decks.get(position);
         holder.tvTitle.setText(deck.getTitle());
         holder.tvSlides.setText(String.format(Locale.getDefault(), "%d slides", deck.getTotalSlides()));
-        holder.tvStatus.setText(deck.getStatus());
+        holder.tvStatus.setText(getStatusLabel(deck.getStatus()));
 
-        // Color status
+        // Color status based on value
         int color = "completed".equals(deck.getStatus()) ? 0xFF28A745 : 0xFFFFC107;
         holder.tvStatus.setTextColor(color);
+
+        // Set icon based on status
+        int iconRes = "completed".equals(deck.getStatus()) 
+            ? android.R.drawable.ic_dialog_info 
+            : android.R.drawable.ic_menu_compass;
+        if (holder.ivStatus != null) {
+            holder.ivStatus.setImageResource(iconRes);
+        }
 
         holder.itemView.setOnClickListener(v -> {
             Intent intent = new Intent(context, PracticeActivity.class);
@@ -54,16 +63,35 @@ public class DeckAdapter extends RecyclerView.Adapter<DeckAdapter.DeckViewHolder
     }
 
     @Override
-    public int getItemCount() { return decks.size(); }
+    public int getItemCount() {
+        return decks.size();
+    }
+
+    private String getStatusLabel(String status) {
+        if (status == null) return "Unknown";
+        
+        switch (status.toLowerCase()) {
+            case "completed":
+                return "Ready";
+            case "in_progress":
+                return "In Progress";
+            case "pending":
+                return "Pending";
+            default:
+                return status;
+        }
+    }
 
     static class DeckViewHolder extends RecyclerView.ViewHolder {
         TextView tvTitle, tvSlides, tvStatus;
+        ImageView ivStatus;
 
         DeckViewHolder(@NonNull View itemView) {
             super(itemView);
             tvTitle = itemView.findViewById(R.id.tvDeckTitle);
             tvSlides = itemView.findViewById(R.id.tvSlideCount);
             tvStatus = itemView.findViewById(R.id.tvStatus);
+            ivStatus = itemView.findViewById(R.id.ivStatusIcon);
         }
     }
 }
