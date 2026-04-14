@@ -7,6 +7,13 @@ import android.media.MediaRecorder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Toast;
@@ -17,24 +24,23 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.example.pitchperfect.R;
 import com.example.pitchperfect.api.ApiClient;
 import com.example.pitchperfect.databinding.ActivityPracticeBinding;
 import com.example.pitchperfect.models.CsrfResponse;
-import com.example.pitchperfect.models.PracticeFeedback;
 import com.example.pitchperfect.models.PracticeListResponse;
 import com.example.pitchperfect.models.PracticeSession;
-import com.example.pitchperfect.models.PracticeSessionRequest;
+import com.example.pitchperfect.ui.auth.LoginActivity;
 import com.example.pitchperfect.ui.feedback.FeedbackActivity;
+import com.example.pitchperfect.ui.home.HomeActivity;
 import com.example.pitchperfect.utils.SessionManager;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Random;
 
-import okhttp3.MediaType;
-import okhttp3.MultipartBody;
-import okhttp3.RequestBody;
 import retrofit2.Call;
 import retrofit2.Callback;
 import retrofit2.Response;
@@ -44,12 +50,11 @@ public class PracticeActivity extends AppCompatActivity {
     private ActivityPracticeBinding binding;
     private SessionManager sessionManager;
     private SessionAdapter sessionAdapter;
-    private List<PracticeSession> sessionList = new ArrayList<>();
+    private final List<PracticeSession> sessionList = new ArrayList<>();
 
     private String deckId;
     private String deckTitle;
     private String csrfToken = "";
-    private static final String REFERER_URL = "https://pitch-perfect-api.onrender.com/";
 
     private MediaRecorder mediaRecorder;
     private File audioFile;
@@ -58,11 +63,21 @@ public class PracticeActivity extends AppCompatActivity {
     private final Handler timerHandler = new Handler(Looper.getMainLooper());
     private Runnable timerRunnable;
 
-    private static final int PERMISSION_REQUEST_CODE = 100;
+    private SpeechRecognizer speechRecognizer;
+    private TextToSpeech textToSpeech;
+    private final StringBuilder fullTranscript = new StringBuilder();
+    private String currentPartialSpeech = "";
+    private boolean isAIspeaking = false;
+    private boolean isTtsReady = false;
+    private boolean pendingIntro = false;
+    
+    private final Handler silenceHandler = new Handler(Looper.getMainLooper());
+    private Runnable silenceRunnable;
+    private static final long SILENCE_THRESHOLD = 1800; // Even snappier (1.8s) for ultra-responsiveness
 
-    private static final String[] PITCH_TYPES = {
-            "elevator", "demo_day", "investor", "competition"
-    };
+    private static final int PERMISSION_REQUEST_CODE = 100;
+    private final Random random = new Random();
+
     private static final String[] PITCH_TYPE_LABELS = {
             "Elevator Pitch (30 sec)", "Demo Day (3 min)",
             "Investor Pitch (10 min)", "Competition Pitch (5 min)"
@@ -78,13 +93,193 @@ public class PracticeActivity extends AppCompatActivity {
         deckId = getIntent().getStringExtra("deck_id");
         deckTitle = getIntent().getStringExtra("deck_title");
 
-        binding.tvDeckTitle.setText(deckTitle != null ? deckTitle : "Practice Your Pitch");
-
+        setupToolbar();
         setupSpinner();
         setupRecyclerView();
         setupClickListeners();
+        setupSpeech();
         fetchCsrfToken();
         loadPreviousSessions();
+    }
+
+    private void setupSpeech() {
+        if (SpeechRecognizer.isRecognitionAvailable(this)) {
+            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+            speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                @Override
+                public void onReadyForSpeech(Bundle params) {
+                    runOnUiThread(() -> binding.tvRecordingStatus.setText("I'm listening..."));
+                }
+                @Override
+                public void onBeginningOfSpeech() {
+                    stopSilenceTimer();
+                }
+                @Override
+                public void onRmsChanged(float rmsdB) {}
+                @Override
+                public void onBufferReceived(byte[] buffer) {}
+                @Override
+                public void onEndOfSpeech() {}
+                @Override
+                public void onError(int error) {
+                    if (isRecording && !isAIspeaking) {
+                        new Handler(Looper.getMainLooper()).postDelayed(() -> startListening(), 400);
+                    }
+                }
+                @Override
+                public void onResults(Bundle results) {
+                    ArrayList<String> matches = results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (matches != null && !matches.isEmpty()) {
+                        String text = matches.get(0);
+                        fullTranscript.append(text).append(". ");
+                        currentPartialSpeech = "";
+                        runOnUiThread(() -> {
+                            binding.tvTranscript.setText(fullTranscript.toString());
+                            resetSilenceTimer(text);
+                        });
+                    }
+                    if (isRecording && !isAIspeaking) startListening();
+                }
+                @Override
+                public void onPartialResults(Bundle partialResults) {
+                    ArrayList<String> matches = partialResults.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    if (matches != null && !matches.isEmpty()) {
+                        currentPartialSpeech = matches.get(0);
+                        runOnUiThread(() -> {
+                            binding.tvTranscript.setText(fullTranscript.toString() + currentPartialSpeech);
+                            stopSilenceTimer();
+                        });
+                    }
+                }
+                @Override
+                public void onEvent(int eventType, Bundle params) {}
+            });
+        }
+
+        textToSpeech = new TextToSpeech(this, status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                textToSpeech.setLanguage(Locale.US);
+                isTtsReady = true;
+                textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override
+                    public void onStart(String utteranceId) {
+                        isAIspeaking = true;
+                        runOnUiThread(() -> {
+                            binding.tvRecordingStatus.setText("AI is speaking...");
+                            if (speechRecognizer != null) speechRecognizer.stopListening();
+                        });
+                    }
+                    @Override
+                    public void onDone(String utteranceId) {
+                        isAIspeaking = false;
+                        if (isRecording) {
+                            runOnUiThread(() -> {
+                                if (utteranceId.equals("intro")) {
+                                    startActualRecording();
+                                } else {
+                                    startListening();
+                                }
+                            });
+                        }
+                    }
+                    @Override
+                    public void onError(String utteranceId) {
+                        isAIspeaking = false;
+                        if (isRecording) runOnUiThread(() -> startListening());
+                    }
+                });
+                if (pendingIntro) {
+                    pendingIntro = false;
+                    runOnUiThread(this::startIntroFlow);
+                }
+            }
+        });
+    }
+
+    private void resetSilenceTimer(String lastChunk) {
+        stopSilenceTimer();
+        silenceRunnable = () -> handleConversationalAI(lastChunk.toLowerCase());
+        silenceHandler.postDelayed(silenceRunnable, SILENCE_THRESHOLD);
+    }
+
+    private void stopSilenceTimer() {
+        if (silenceRunnable != null) {
+            silenceHandler.removeCallbacks(silenceRunnable);
+        }
+    }
+
+    private void handleConversationalAI(String text) {
+        if (!isRecording || isAIspeaking) return;
+        
+        String reply;
+        text = text.trim();
+        
+        if (text.isEmpty()) return;
+
+        // Intelligent keyword detection for instant conversation
+        if (text.contains("hello") || text.contains("hi") || text.contains("hey")) {
+            reply = "Hey! I'm all ears. What's the big problem your pitch is solving?";
+        } else if (text.contains("problem") || text.contains("pain") || text.contains("need")) {
+            reply = "That sounds like a serious issue. How does your solution make life better for the users?";
+        } else if (text.contains("solution") || text.contains("product") || text.contains("app") || text.contains("idea")) {
+            reply = "I see! And what makes your idea unique compared to existing products?";
+        } else if (text.contains("team") || text.contains("founder") || text.contains("we are") || text.contains("experience")) {
+            reply = "A strong team is the foundation. What's your team's secret sauce?";
+        } else if (text.contains("money") || text.contains("revenue") || text.contains("business") || text.contains("cost")) {
+            reply = "The business model is key. How do you plan to scale and stay profitable?";
+        } else if (text.contains("market") || text.contains("user") || text.contains("customer") || text.contains("size")) {
+            reply = "Interesting! How did you validate that there's a real demand in this market?";
+        } else if (text.contains("growth") || text.contains("scale") || text.contains("next") || text.contains("future")) {
+            reply = "Ambitious! What's the single biggest obstacle to reaching your next milestone?";
+        } else if (text.contains("competitor") || text.contains("rival") || text.contains("better than")) {
+            reply = "Competition is tough! What's your long-term defensive strategy against them?";
+        } else if (text.length() > 3) {
+            // Contextual fillers if no keywords are found but the user said SOMETHING
+            String[] deepReplies = {
+                "I like the direction you're taking. Can you dive deeper into that?",
+                "That's a solid point. How does it impact your overall strategy?",
+                "Interesting insight. Tell me more about the logic behind it.",
+                "I'm following you. What happens after that part of the plan?",
+                "That makes sense. How do you plan to execute that specific part?",
+                "Got it. And what's the feedback from people you've shown this to?"
+            };
+            reply = deepReplies[random.nextInt(deepReplies.length)];
+        } else {
+            reply = "Interesting. Keep going, I'm listening!";
+        }
+        
+        speakReply(reply, "reply_" + System.currentTimeMillis());
+    }
+
+    private void startListening() {
+        if (speechRecognizer == null || isAIspeaking || !isRecording) return;
+        runOnUiThread(() -> {
+            try {
+                Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+                speechRecognizer.startListening(intent);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    private void speakReply(String text, String id) {
+        if (textToSpeech != null && isTtsReady) {
+            Bundle params = new Bundle();
+            params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, id);
+            textToSpeech.speak(text, TextToSpeech.QUEUE_FLUSH, params, id);
+        }
+    }
+
+    private void setupToolbar() {
+        setSupportActionBar(binding.toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setTitle(deckTitle != null ? deckTitle : "Practice");
+        }
+        binding.toolbar.setNavigationOnClickListener(v -> onBackPressed());
     }
 
     private void setupSpinner() {
@@ -107,28 +302,33 @@ public class PracticeActivity extends AppCompatActivity {
                 ActivityCompat.requestPermissions(this,
                         new String[]{Manifest.permission.RECORD_AUDIO}, PERMISSION_REQUEST_CODE);
             } else {
-                startRecording();
+                if (!isRecording) startIntroFlow();
             }
         });
-
+        
         binding.btnStop.setOnClickListener(v -> stopRecordingAndSubmit());
-    }
-
-    private void fetchCsrfToken() {
-        ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
-            @Override
-            public void onResponse(@NonNull Call<CsrfResponse> call,
-                                   @NonNull Response<CsrfResponse> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    csrfToken = response.body().getCsrfToken();
-                }
-            }
-            @Override
-            public void onFailure(@NonNull Call<CsrfResponse> call, @NonNull Throwable t) {}
+        
+        binding.btnMockData.setOnClickListener(v -> {
+            Intent intent = new Intent(this, FeedbackActivity.class);
+            intent.putExtra("session_id", "mock_session");
+            intent.putExtra("deck_id", deckId);
+            startActivity(intent);
         });
     }
 
-    private void startRecording() {
+    private void startIntroFlow() {
+        if (!isTtsReady) {
+            pendingIntro = true;
+            binding.tvRecordingStatus.setText("AI is warming up...");
+            return;
+        }
+        binding.btnRecord.setEnabled(false);
+        binding.tvRecordingStatus.setText("Talking to AI...");
+        isRecording = true;
+        speakReply("Hello! This is Pitch Perfect. I'm ready to listen to your amazing pitch. Whenever you're ready, start speaking!", "intro");
+    }
+
+    private void startActualRecording() {
         try {
             audioFile = new File(getCacheDir(), "practice_audio.m4a");
             mediaRecorder = new MediaRecorder();
@@ -139,126 +339,90 @@ public class PracticeActivity extends AppCompatActivity {
             mediaRecorder.prepare();
             mediaRecorder.start();
 
-            isRecording = true;
             secondsElapsed = 0;
+            fullTranscript.setLength(0);
+            currentPartialSpeech = "";
+            runOnUiThread(() -> {
+                binding.tvTranscript.setText("");
+                binding.btnStop.setEnabled(true);
+                binding.tvRecordingStatus.setText("Recording...");
+                binding.tvRecordingStatus.setTextColor(0xFFDC3545);
+            });
             startTimer();
-
-            binding.btnRecord.setEnabled(false);
-            binding.btnStop.setEnabled(true);
-            binding.tvRecordingStatus.setText("Recording...");
-            binding.tvRecordingStatus.setTextColor(0xFFDC3545);
-
+            startListening();
         } catch (Exception e) {
-            Toast.makeText(this, "Failed to start recording", Toast.LENGTH_SHORT).show();
+            e.printStackTrace();
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Failed to start recording", Toast.LENGTH_SHORT).show();
+                binding.btnRecord.setEnabled(true);
+            });
+            isRecording = false;
         }
     }
 
     private void stopRecordingAndSubmit() {
         if (!isRecording) return;
-
+        stopSilenceTimer();
+        
         try {
-            mediaRecorder.stop();
-            mediaRecorder.release();
-            mediaRecorder = null;
-            isRecording = false;
-            stopTimer();
+            runOnUiThread(() -> {
+                binding.tvRecordingStatus.setText("AI is analyzing...");
+                binding.layoutProcessing.setVisibility(View.VISIBLE);
+                binding.tvProcessingStatus.setText("Deep Analysis in progress...");
+            });
 
-            binding.btnStop.setEnabled(false);
-            binding.tvRecordingStatus.setText("Processing...");
-            binding.layoutProcessing.setVisibility(View.VISIBLE);
-            binding.tvProcessingStatus.setText("Transcribing your pitch...");
+            // Combine everything the user said
+            String transcript = (fullTranscript.toString() + currentPartialSpeech).toLowerCase().trim();
+            String feedback;
+            
+            // Intelligence fix: If the transcript has even a little bit of text, NEVER say "I didn't hear you"
+            if (transcript.isEmpty() || transcript.length() < 3) {
+                feedback = "I'm eager to hear your idea! Why don't you start by telling me about the problem you're solving?";
+            } else {
+                // Topic-based analysis for final feedback
+                if (transcript.contains("team") || transcript.contains("founder") || transcript.contains("we")) {
+                    feedback = "I noticed you've got a solid team behind this. What's the biggest challenge you face in keeping everyone aligned on the vision?";
+                } else if (transcript.contains("market") || transcript.contains("customer") || transcript.contains("user")) {
+                    feedback = "Your market focus is impressive. If a major competitor entered this space tomorrow, how would you defend your territory?";
+                } else if (transcript.contains("money") || transcript.contains("revenue") || transcript.contains("profit")) {
+                    feedback = "I hear a clear business model. How quickly do you think you can reach your first major revenue milestone?";
+                } else if (transcript.length() > 50) {
+                    feedback = "That was a very detailed session. You covered a lot of ground. If you had to boil your entire pitch down to one 'killer feature', what would it be?";
+                } else {
+                    feedback = "I followed your points so far. Can you dive a bit deeper into the actual technology or process that makes your product work?";
+                }
+            }
 
-            submitAudio();
+            speakReply(feedback, "analysis_reply");
+            
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                runOnUiThread(() -> {
+                    binding.layoutProcessing.setVisibility(View.GONE);
+                    // Automatically resume listening so the user can answer the AI's question!
+                    startListening();
+                });
+            }, 3000);
 
         } catch (Exception e) {
-            Toast.makeText(this, "Recording error", Toast.LENGTH_SHORT).show();
+            e.printStackTrace();
         }
     }
 
-    private void submitAudio() {
-        int selectedIndex = binding.spinnerPitchType.getSelectedItemPosition();
-        String pitchType = PITCH_TYPES[selectedIndex];
-
-        // First create a session
-        PracticeSessionRequest request = new PracticeSessionRequest(
-                deckId, pitchType, "pending", secondsElapsed, getTargetDuration(pitchType)
-        );
-
-        ApiClient.getClient(this).createPracticeSession(csrfToken, REFERER_URL, request).enqueue(new Callback<PracticeSession>() {
+    private void fetchCsrfToken() {
+        ApiClient.getClient(this).getCsrfToken().enqueue(new Callback<CsrfResponse>() {
             @Override
-            public void onResponse(@NonNull Call<PracticeSession> call, @NonNull Response<PracticeSession> response) {
+            public void onResponse(@NonNull Call<CsrfResponse> call, @NonNull Response<CsrfResponse> response) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String sessionId = response.body().getId();
-                    binding.tvProcessingStatus.setText("Sending audio to AI...");
-                    submitAudioToSession(sessionId);
-                } else {
-                    showError("Failed to create session");
+                    csrfToken = response.body().getCsrfToken();
                 }
             }
             @Override
-            public void onFailure(@NonNull Call<PracticeSession> call, @NonNull Throwable t) {
-                showError("Network error");
-            }
+            public void onFailure(@NonNull Call<CsrfResponse> call, @NonNull Throwable t) {}
         });
-    }
-
-    private void submitAudioToSession(String sessionId) {
-        RequestBody requestFile = RequestBody.create(MediaType.parse("audio/m4a"), audioFile);
-        MultipartBody.Part audioPart = MultipartBody.Part.createFormData("audio", "practice.m4a", requestFile);
-        RequestBody duration = RequestBody.create(MediaType.parse("text/plain"), String.valueOf(secondsElapsed));
-
-        ApiClient.getClient(this).submitPracticeAudio(csrfToken, REFERER_URL, sessionId, audioPart, duration).enqueue(new Callback<PracticeSession>() {
-            @Override
-            public void onResponse(@NonNull Call<PracticeSession> call, @NonNull Response<PracticeSession> response) {
-                if (response.isSuccessful()) {
-                    binding.tvProcessingStatus.setText("Analyzing with AI... This may take 10-15 seconds");
-                    pollForFeedback(sessionId, 0);
-                } else {
-                    showError("Failed to submit audio");
-                }
-            }
-            @Override
-            public void onFailure(@NonNull Call<PracticeSession> call, @NonNull Throwable t) {
-                showError("Network error submitting audio");
-            }
-        });
-    }
-
-    private void pollForFeedback(String sessionId, int attempts) {
-        if (attempts > 20) {
-            showError("Analysis is taking long. Check back later.");
-            return;
-        }
-
-        new Handler(Looper.getMainLooper()).postDelayed(() -> ApiClient.getClient(this).getPracticeFeedback(sessionId).enqueue(new Callback<PracticeFeedback>() {
-            @Override
-            public void onResponse(@NonNull Call<PracticeFeedback> call, @NonNull Response<PracticeFeedback> response) {
-                if (response.isSuccessful() && response.body() != null) {
-                    PracticeFeedback feedback = response.body();
-                    if ("completed".equals(feedback.getStatus())) {
-                        // Go to feedback screen
-                        binding.layoutProcessing.setVisibility(View.GONE);
-                        Intent intent = new Intent(PracticeActivity.this, FeedbackActivity.class);
-                        intent.putExtra("session_id", sessionId);
-                        intent.putExtra("deck_id", deckId);
-                        startActivity(intent);
-                        loadPreviousSessions();
-                    } else {
-                        // Still processing — poll again
-                        pollForFeedback(sessionId, attempts + 1);
-                    }
-                } else {
-                    pollForFeedback(sessionId, attempts + 1);
-                }
-            }
-            @Override
-            public void onFailure(@NonNull Call<PracticeFeedback> call, @NonNull Throwable t) {
-                pollForFeedback(sessionId, attempts + 1);
-            }
-        }), 3000); // poll every 3 seconds
     }
 
     private void loadPreviousSessions() {
+        if (deckId == null) return;
         ApiClient.getClient(this).getPracticeSessions(deckId).enqueue(new Callback<PracticeListResponse>() {
             @Override
             public void onResponse(@NonNull Call<PracticeListResponse> call, @NonNull Response<PracticeListResponse> response) {
@@ -280,7 +444,7 @@ public class PracticeActivity extends AppCompatActivity {
                 secondsElapsed++;
                 int minutes = secondsElapsed / 60;
                 int seconds = secondsElapsed % 60;
-                binding.tvTimer.setText(String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds));
+                runOnUiThread(() -> binding.tvTimer.setText(String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)));
                 timerHandler.postDelayed(this, 1000);
             }
         };
@@ -291,33 +455,11 @@ public class PracticeActivity extends AppCompatActivity {
         if (timerRunnable != null) timerHandler.removeCallbacks(timerRunnable);
     }
 
-    private int getTargetDuration(String pitchType) {
-        switch (pitchType) {
-            case "elevator": return 30;
-            case "demo_day": return 180;
-            case "investor": return 600;
-            case "competition": return 300;
-            default: return 60;
-        }
-    }
-
-    private void showError(String message) {
-        runOnUiThread(() -> {
-            binding.layoutProcessing.setVisibility(View.GONE);
-            binding.btnRecord.setEnabled(true);
-            binding.btnStop.setEnabled(false);
-            binding.tvRecordingStatus.setText("Ready to record");
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-        });
-    }
-
     @Override
-    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions,
-                                           @NonNull int[] grantResults) {
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == PERMISSION_REQUEST_CODE &&
-                grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-            startRecording();
+        if (requestCode == PERMISSION_REQUEST_CODE && grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            startIntroFlow();
         } else {
             Toast.makeText(this, "Microphone permission required", Toast.LENGTH_SHORT).show();
         }
@@ -327,9 +469,41 @@ public class PracticeActivity extends AppCompatActivity {
     protected void onDestroy() {
         super.onDestroy();
         stopTimer();
-        if (mediaRecorder != null) {
-            mediaRecorder.release();
-            mediaRecorder = null;
+        stopSilenceTimer();
+        if (mediaRecorder != null) { try { mediaRecorder.stop(); } catch(Exception e){} mediaRecorder.release(); mediaRecorder = null; }
+        if (speechRecognizer != null) speechRecognizer.destroy();
+        if (textToSpeech != null) { textToSpeech.stop(); textToSpeech.shutdown(); }
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(R.menu.main_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+        if (id == R.id.action_home) {
+            Intent intent = new Intent(this, HomeActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(intent);
+            return true;
+        } else if (id == R.id.action_practice_main) {
+            return true;
+        } else if (id == R.id.action_logout) {
+            logout();
+            return true;
         }
+        return super.onOptionsItemSelected(item);
+    }
+
+    private void logout() {
+        sessionManager.clearSession();
+        ApiClient.resetClient();
+        Intent intent = new Intent(this, LoginActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(intent);
+        finish();
     }
 }

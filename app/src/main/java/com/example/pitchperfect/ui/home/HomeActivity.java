@@ -13,12 +13,14 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.example.pitchperfect.R;
 import com.example.pitchperfect.api.ApiClient;
 import com.example.pitchperfect.databinding.ActivityHomeBinding;
 import com.example.pitchperfect.models.CsrfResponse;
 import com.example.pitchperfect.models.PitchDeck;
 import com.example.pitchperfect.models.PitchDeckListResponse;
 import com.example.pitchperfect.ui.auth.LoginActivity;
+import com.example.pitchperfect.ui.practice.PracticeActivity;
 import com.example.pitchperfect.utils.SessionManager;
 
 import java.io.File;
@@ -87,6 +89,13 @@ public class HomeActivity extends AppCompatActivity {
                         "application/vnd.ms-powerpoint"
                 })
         );
+
+        binding.btnQuickPractice.setOnClickListener(v -> {
+            Intent intent = new Intent(this, PracticeActivity.class);
+            intent.putExtra("deck_id", (String) null); // No deck
+            intent.putExtra("deck_title", "Quick Practice");
+            startActivity(intent);
+        });
     }
 
     private void fetchCsrfToken() {
@@ -202,14 +211,20 @@ public class HomeActivity extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(android.view.Menu menu) {
-        getMenuInflater().inflate(com.example.pitchperfect.R.menu.menu_home, menu);
+        getMenuInflater().inflate(R.menu.main_menu, menu);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        if (item.getItemId() == com.example.pitchperfect.R.id.action_logout) {
+        int id = item.getItemId();
+        if (id == R.id.action_logout) {
             logout();
+            return true;
+        } else if (id == R.id.action_home) {
+            return true;
+        } else if (id == R.id.action_practice_main) {
+            Toast.makeText(this, "Select a pitch deck to practice", Toast.LENGTH_SHORT).show();
             return true;
         }
         return super.onOptionsItemSelected(item);

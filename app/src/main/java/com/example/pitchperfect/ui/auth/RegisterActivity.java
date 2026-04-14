@@ -36,8 +36,19 @@ public class RegisterActivity extends AppCompatActivity {
         setContentView(binding.getRoot());
 
         sessionManager = new SessionManager(this);
+        
+        setupToolbar();
         fetchCsrfToken();
         setupClickListeners();
+    }
+
+    private void setupToolbar() {
+        setSupportActionBar(binding.toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+            getSupportActionBar().setTitle("Create Account");
+        }
+        binding.toolbar.setNavigationOnClickListener(v -> onBackPressed());
     }
 
     private void fetchCsrfToken() {

@@ -39,8 +39,16 @@ public class LoginActivity extends AppCompatActivity {
             return;
         }
 
+        setupToolbar();
         fetchCsrfToken();
         setupClickListeners();
+    }
+
+    private void setupToolbar() {
+        setSupportActionBar(binding.toolbar);
+        if (getSupportActionBar() != null) {
+            getSupportActionBar().setTitle("Login");
+        }
     }
 
     private void fetchCsrfToken() {
